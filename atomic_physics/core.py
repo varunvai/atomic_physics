@@ -620,6 +620,43 @@ class Atom:
         Omega = amplitude * R / consts.hbar
         return Omega
 
+    def get_rabi_E1(self, lower: int, upper: int, amplitude: float) -> float:
+        r"""Returns the Rabi frequency for an electric dipole transition.
+
+        See also :meth:`get_electric_multipoles`.
+
+        :param lower: index of the state with lower energy involved in the transition.
+        :param upper: index of the state with higher energy involved in the transition.
+        :param amplitude: amplitude of the component of the driving electric field (
+            spherical basis) which couples to this transition (V/m).
+        :return: the Rabi frequency. We retain phase information, so this can be either
+            positive or negative. We define the Rabi frequency so that
+            :math:`t_{\pi} = \pi / |\Omega|`
+        """
+        # Check if transition is dipole allowed
+        level_u = self.get_level_for_state(upper)
+        level_l = self.get_level_for_state(lower)
+        dJ = level_u.J - level_l.J
+        dL = level_u.L - level_l.L
+
+        if dJ not in [-1, 0, +1] or dL not in [-1, 0, +1]:
+            raise ValueError(
+                    "Unsupported transition order. \n"
+                    "Only 1st order transitions are "
+                    "supported. [abs(dL) & abs(dJ) < 1]\n"
+                    "Got dJ={} and dL={}".format(dJ, dL)
+                )
+        
+        # The matrix returned by _calc_electric_multipoles() is upper-triangular
+        # The following line symmetrizes it to make the function agnostic to
+        # the order of the first two arguments.
+        R = (self.get_electric_multipoles()[upper, lower] + 
+             self.get_electric_multipoles()[lower, upper])
+        f = self.get_transition_frequency_for_states((lower, upper), relative=False)
+        d = R*np.sqrt(3 * np.pi * consts.epsilon_0 * consts.hbar * (consts.c/f)**3)
+        Omega = amplitude * d / consts.hbar
+        return Omega
+
     def _calc_electric_multipoles(self):
         if self._electric_multipoles is not None:
             return
