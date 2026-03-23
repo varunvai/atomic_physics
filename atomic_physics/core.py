@@ -628,7 +628,7 @@ class Atom:
         :param lower: index of the state with lower energy involved in the transition.
         :param upper: index of the state with higher energy involved in the transition.
         :param amplitude: amplitude of the component of the driving E-field gradient 
-            (spherical basis) which couples to this transition (V/m^2).
+            (spherical basis) which couples to this transition (V/m).
         :return: the Rabi frequency. We retain phase information, so this can be either
             positive or negative. We define the Rabi frequency so that
             :math:`t_{\pi} = \pi / |\Omega|`
