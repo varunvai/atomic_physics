@@ -671,7 +671,7 @@ class Atom:
             positive or negative. We define the Rabi frequency so that
             :math:`t_{\pi} = \pi / |\Omega|`
         """
-        # Check if transition is dipole allowed
+        # Check if transition is quadrupole allowed
         level_u = self.get_level_for_state(upper)
         level_l = self.get_level_for_state(lower)
         dJ = level_u.J - level_l.J
