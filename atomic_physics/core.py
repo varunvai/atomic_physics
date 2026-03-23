@@ -627,8 +627,8 @@ class Atom:
 
         :param lower: index of the state with lower energy involved in the transition.
         :param upper: index of the state with higher energy involved in the transition.
-        :param amplitude: amplitude of the component of the driving electric field (
-            spherical basis) which couples to this transition (V/m).
+        :param amplitude: amplitude of the component of the driving E-field gradient 
+            (spherical basis) which couples to this transition (V/m^2).
         :return: the Rabi frequency. We retain phase information, so this can be either
             positive or negative. We define the Rabi frequency so that
             :math:`t_{\pi} = \pi / |\Omega|`
@@ -639,22 +639,120 @@ class Atom:
         dJ = level_u.J - level_l.J
         dL = level_u.L - level_l.L
 
-        if dJ not in [-1, 0, +1] or dL not in [-1, 0, +1]:
+        if dJ not in [-1, 0, +1] or dL not in [-1, +1]:
             raise ValueError(
                     "Unsupported transition order. \n"
                     "Only 1st order transitions are "
-                    "supported. [abs(dL) & abs(dJ) < 1]\n"
+                    "supported. [abs(dJ) < 1 & abs(dL)=+/-1] \n"
                     "Got dJ={} and dL={}".format(dJ, dL)
                 )
-        
+            
         # The matrix returned by _calc_electric_multipoles() is upper-triangular
         # The following line symmetrizes it to make the function agnostic to
         # the order of the first two arguments.
         R = (self.get_electric_multipoles()[upper, lower] + 
              self.get_electric_multipoles()[lower, upper])
+        
         f = self.get_transition_frequency_for_states((lower, upper), relative=False)
-        d = R*np.sqrt(3 * np.pi * consts.epsilon_0 * consts.hbar * (consts.c/f)**3)
-        Omega = amplitude * d / consts.hbar
+        D = R*np.sqrt(3 * np.pi * consts.epsilon_0 * consts.hbar * (consts.c/f)**3)
+        Omega = amplitude * D / consts.hbar
+        return Omega
+
+    def get_rabi_E2(self, lower: int, upper: int, amplitude: float) -> float:
+        r"""Returns the Rabi frequency for an electric quadrupole transition.
+
+        See also :meth:`get_electric_multipoles`.
+
+        :param lower: index of the state with lower energy involved in the transition.
+        :param upper: index of the state with higher energy involved in the transition.
+        :param amplitude: amplitude of the component of the driving E-field gradient 
+            (spherical basis) which couples to this transition (V/m^2).
+        :return: the Rabi frequency. We retain phase information, so this can be either
+            positive or negative. We define the Rabi frequency so that
+            :math:`t_{\pi} = \pi / |\Omega|`
+        """
+        # Check if transition is dipole allowed
+        level_u = self.get_level_for_state(upper)
+        level_l = self.get_level_for_state(lower)
+        dJ = level_u.J - level_l.J
+        dL = level_u.L - level_l.L
+
+        if dJ not in [-2, -1, 0, +1, +2] or dL not in [-2, 0, +2]:
+            raise ValueError(
+                    "Unsupported transition order. \n"
+                    "Only 2nd order transitions are "
+                    "supported. [abs(dJ) < 2 & abs(dL)=0 or 2]\n"
+                    "Got dJ={} and dL={}".format(dJ, dL)
+                )
+            
+        # The matrix returned by _calc_electric_multipoles() is upper-triangular
+        # The following line symmetrizes it to make the function agnostic to
+        # the order of the first two arguments.
+        R = (self.get_electric_multipoles()[upper, lower] + 
+             self.get_electric_multipoles()[lower, upper])
+        
+        f = self.get_transition_frequency_for_states((lower, upper), relative=False)
+        Q = R*np.sqrt(3 * np.pi * consts.epsilon_0 * consts.hbar * (consts.c/f)**5)
+        Omega = amplitude * Q / consts.hbar
+        return Omega
+
+    def _get_rabi_optical(self, lower: int, upper: int, amplitude: float) -> float:
+        r"""Returns the Rabi frequency for an electric multipole transition.
+        Currently only supports electric dipole (E1) and electric quadrupole (E2)
+        transitions. Can be modified easily for higher orders if these matrix elements
+        are provided by `get_electric_multipoles`.
+
+        See also :meth:`get_electric_multipoles`.
+
+        :param lower: index of the state with lower energy involved in the transition.
+        :param upper: index of the state with higher energy involved in the transition.
+        :param amplitude: amplitude of the spherical basis component of the driving field.
+            For E1 transitions, amplitude units should be V/m. 
+            For E2 transitions, amplitude units should be V/m^2... etc.
+        :return: the Rabi frequency. We retain phase information, so this can be either
+            positive or negative. We define the Rabi frequency so that
+            :math:`t_{\pi} = \pi / |\Omega|`
+        """
+        # Check if transition is allowed under E1 or E2 selection rules
+        level_u = self.get_level_for_state(upper)
+        level_l = self.get_level_for_state(lower)
+        dJ = level_u.J - level_l.J
+        dL = level_u.L - level_l.L
+
+        if dL in [-1, 1]:
+            order = 1
+            if dJ not in [-1, 0, +1]:
+                raise ValueError(                    
+                    "For 1st order transitions \n"
+                    "dJ must be in [-1, 0, 1] \n"
+                    "Got dJ={} and dL={}".format(dJ, dL)
+                )
+        elif dL in [-2, 0, 2]:
+            order = 2
+            if dJ not in [-2, -1, 0, 1, 2]:
+                raise ValueError(                    
+                    "For 2nd order transitions \n"
+                    "dJ must be in [-2, -1, 0, 1, 2] \n"
+                    "Got dJ={} and dL={}".format(dJ, dL)
+                )
+        else:
+            raise ValueError(
+                "Unsupported transition order. \n"
+                "Only 1st order transitions are "
+                "supported. [abs(dL) & abs(dJ) < 2]\n"
+                "Got dJ={} and dL={}".format(dJ, dL)
+            )
+                  
+        # The matrix returned by _calc_electric_multipoles() is upper-triangular
+        # The following line symmetrizes it to make 'get_rabi_optical' function 
+        # agnostic to the order of the first two arguments.
+        R = (self.get_electric_multipoles()[upper, lower] + 
+             self.get_electric_multipoles()[lower, upper])
+
+        # NOTE: f has units of rad/s
+        f = self.get_transition_frequency_for_states((lower, upper), relative=False)
+        M = R*np.sqrt(3 * np.pi * consts.epsilon_0 * consts.hbar * (consts.c/f)**(2*order+1))
+        Omega = amplitude * M / consts.hbar
         return Omega
 
     def _calc_electric_multipoles(self):
