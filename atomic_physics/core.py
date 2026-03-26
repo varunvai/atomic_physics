@@ -1,4 +1,5 @@
 import dataclasses
+import warnings
 
 import numpy as np
 import scipy.constants as consts
@@ -729,6 +730,10 @@ class Atom:
                 )
         elif dL in [-2, 0, 2]:
             order = 2
+            warnings.warn(
+                "This is an E2 transition. Ensure amplitude units are V/m^2", 
+                UserWarning, stacklevel=3
+            )
             if dJ not in [-2, -1, 0, 1, 2]:
                 raise ValueError(                    
                     "For 2nd order transitions \n"
