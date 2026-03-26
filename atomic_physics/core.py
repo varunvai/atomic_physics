@@ -696,7 +696,7 @@ class Atom:
         Omega = amplitude * Q / consts.hbar
         return Omega
 
-    def _get_rabi_optical(self, lower: int, upper: int, amplitude: float) -> float:
+    def get_rabi_laser(self, lower: int, upper: int, amplitude: float) -> float:
         r"""Returns the Rabi frequency for an electric multipole transition.
         Currently only supports electric dipole (E1) and electric quadrupole (E2)
         transitions. Can be modified easily for higher orders if these matrix elements
