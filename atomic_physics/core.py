@@ -11,6 +11,10 @@ from atomic_physics.operators import (
     expectation_value,
 )
 from atomic_physics.wigner import wigner3j
+from atomic_physics.polarization import (
+    cartesian_to_spherical,
+    spherical_to_cartesian,
+)
 
 _uB = consts.physical_constants["Bohr magneton"][0]
 _uN = consts.physical_constants["nuclear magneton"][0]
@@ -148,6 +152,34 @@ class RFDrive:
         if self.polarization.shape != (3,):
             raise ValueError("Polarization must be a 3-element vector")
 
+@dataclasses.dataclass(frozen=True)
+class LaserDrive:
+    """Represents an AC electric field, which drives electric dipole or quadrupole transitions.
+
+    Attributes:
+        frequency: frequency of the laser drive (rad/s).
+        amplitude: magnitude of the laser's electric field (V/m).
+        polarization: Cartesian vector describing the electric field's polarization.
+        k_vector: k-vector of laser.
+    """
+
+    frequency: float
+    amplitude: float
+    polarization: np.ndarray
+    k_vector: np.ndarray
+
+    def __post_init__(self):
+        if self.polarization.shape != (3,):
+            raise ValueError("Polarization must be a 3-element vector")
+        if self.k_vector.shape != (3,):
+            raise ValueError("k_vector must be a 3-element vector")
+
+    def get_multipole_moment(self, L: int, M: int):
+        if L == 1:
+            E_spherical = self.amplitude*self.polarization
+            return cartesian_to_spherical(E)[M + 1]
+        else:
+            return None
 
 @dataclasses.dataclass
 class Atom:
