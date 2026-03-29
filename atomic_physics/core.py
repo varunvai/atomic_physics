@@ -172,29 +172,34 @@ class LaserDrive:
     polarization: np.ndarray
     k_vector: np.ndarray
 
-    # Rank 1 spherical basis components using bidirectional indexing for M
+    # Rank 1 spherical basis components
     u1 = np.array([
-        [0, 0, 1], 
-        [-np.sqrt(1/2), -1j*np.sqrt(1/2), 0], 
-        [np.sqrt(1/2), -1j*np.sqrt(1/2), 0]
+        [0, 0, 1], # q = 0
+        [-np.sqrt(1/2), -1j*np.sqrt(1/2), 0], # q = +1
+        [np.sqrt(1/2), -1j*np.sqrt(1/2), 0] # q = -1
     ], dtype=complex)
 
-    # Rank 2 spherical basis components using bidirectional indexing for M
+    # Rank 2 spherical basis components
     u2 = np.ndarray((5, 3, 3), dtype=complex)
+    # q = 0
     u2[0] = np.sqrt(1/6) * (
         2 * np.outer(u1[0], u1[0]) + 
         np.outer(u1[1], u1[-1]) + 
         np.outer(u1[-1], u1[1])
     )
+    # q = +1
     u2[1] = 1/np.sqrt(2) * (
         np.outer(u1[0], u1[1]) + 
         np.outer(u1[1], u1[0])
     )
+    # q = +2
     u2[2] = np.outer(u1[1], u1[1])
+    # q = -1
     u2[-1] = 1/np.sqrt(2) * (
         np.outer(u1[0], u1[-1]) + 
         np.outer(u1[-1], u1[0])
     )
+    # q = -2
     u2[-2] = np.outer(u1[-1], u1[-1])
 
     def __post_init__(self):
