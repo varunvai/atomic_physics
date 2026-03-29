@@ -11,6 +11,10 @@ from atomic_physics.operators import (
     expectation_value,
 )
 from atomic_physics.wigner import wigner3j
+from atomic_physics.polarization import (
+    cartesian_to_spherical,
+    spherical_to_cartesian,
+)
 
 _uB = consts.physical_constants["Bohr magneton"][0]
 _uN = consts.physical_constants["nuclear magneton"][0]
@@ -148,6 +152,82 @@ class RFDrive:
         if self.polarization.shape != (3,):
             raise ValueError("Polarization must be a 3-element vector")
 
+@dataclasses.dataclass(frozen=True)
+class LaserDrive:
+    """Represents an AC electric field, which drives electric dipole or quadrupole 
+    transitions.
+
+    Attributes:
+        frequency: frequency of the laser drive (rad/s).
+        amplitude: magnitude of the laser's electric field (V/m).
+        polarization: Cartesian vector describing the electric field's polarization. 
+            NOTE: `polarization` must be defined in the same basis as `k_vector`, 
+            NOT as a Jones vector in a plane normal to `k_vector`.This eliminates 
+            ambiguities when projecting 'polarization' along the quantization 
+            axis (z) of `Atom`.
+        k_vector: k-vector of laser.
+    """
+    frequency: float
+    amplitude: float
+    polarization: np.ndarray
+    k_vector: np.ndarray
+
+    # Rank 1 spherical basis components
+    u1 = np.array([
+        [0, 0, 1], # q = 0
+        [-np.sqrt(1/2), -1j*np.sqrt(1/2), 0], # q = +1
+        [np.sqrt(1/2), -1j*np.sqrt(1/2), 0] # q = -1
+    ], dtype=complex)
+
+    # Rank 2 spherical basis components
+    u2 = np.ndarray((5, 3, 3), dtype=complex)
+    # q = 0
+    u2[0] = np.sqrt(1/6) * (
+        2 * np.outer(u1[0], u1[0]) + 
+        np.outer(u1[1], u1[-1]) + 
+        np.outer(u1[-1], u1[1])
+    )
+    # q = +1
+    u2[1] = 1/np.sqrt(2) * (
+        np.outer(u1[0], u1[1]) + 
+        np.outer(u1[1], u1[0])
+    )
+    # q = +2
+    u2[2] = np.outer(u1[1], u1[1])
+    # q = -1
+    u2[-1] = 1/np.sqrt(2) * (
+        np.outer(u1[0], u1[-1]) + 
+        np.outer(u1[-1], u1[0])
+    )
+    # q = -2
+    u2[-2] = np.outer(u1[-1], u1[-1])
+
+    def __post_init__(self):
+        if self.polarization.shape != (3,):
+            raise ValueError("Polarization must be a 3-element vector")
+        if self.k_vector.shape != (3,):
+            raise ValueError("k_vector must be a 3-element vector")
+        if np.dot(self.k_vector, self.polarization) != 0:
+            raise AssertionError("k_vector and polarization must be orthogonal")
+        
+    def get_amplitude(self, L: int, M: int):
+        """Returns projection of laser's electric field onto the spherical
+        tensor component with indicies L >= 0 and -L <= M <= L. Useful for
+        extracting high-order moments for arbitrary `k_vector` and `polarization`.
+        
+        :param L: value of L.
+        :param M: value of M.
+        :return: amplitude of spherical basis component
+        """
+        assert np.abs(M) <= np.abs(L), "Ensure -L <= M <= L"
+        E1 = self.amplitude*self.polarization
+        if np.abs(L) == 1:
+            return np.dot(E1, LaserDrive.u1[M].conjugate())
+        elif np.abs(L) == 2:
+            E2 = np.outer(E1, self.k_vector)
+            return np.sum(E2 * LaserDrive.u2[M].conjugate())
+        else:
+            raise ValueError("Function does not support moments higher than quadrupole")
 
 @dataclasses.dataclass
 class Atom:
