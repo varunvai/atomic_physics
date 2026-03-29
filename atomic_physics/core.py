@@ -191,11 +191,11 @@ class LaserDrive:
         np.outer(u1[1], u1[0])
     )
     u2[2] = np.outer(u1[1], u1[1])
-    u2[-2] = 1/np.sqrt(2) * (
+    u2[-1] = 1/np.sqrt(2) * (
         np.outer(u1[0], u1[-1]) + 
         np.outer(u1[-1], u1[0])
     )
-    u2[-1] = np.outer(u1[-1], u1[-1])
+    u2[-2] = np.outer(u1[-1], u1[-1])
 
     def __post_init__(self):
         if self.polarization.shape != (3,):
