@@ -210,40 +210,14 @@ class LaserDrive:
         if np.dot(self.k_vector, self.polarization) != 0:
             raise AssertionError("k_vector and polarization must be orthogonal")
         
-    def get_multipole_moment(self, L: int, M: int):
-        assert np.abs(M) <= L
-        E_spherical = cartesian_to_spherical(self.amplitude*self.polarization)
-        if L == 1:
-            # Kill me
-            return E_spherical[1 - M]/(-1)**M
-        elif L == 2:
-            k_spherical = cartesian_to_spherical(self.k_vector)
-            # God is dead and we killed him
-            if M == 2:
-                return E_spherical[1-1]*k_spherical[1-1]
-            elif M == 1:
-                return np.sqrt(1/2)*(E_spherical[1-1]*k_spherical[1-0] +
-                                     E_spherical[1-0]*k_spherical[1-1])
-            elif M == 0:
-                return np.sqrt(1/6)*(E_spherical[1--1]*k_spherical[1-1] +
-                                     2*E_spherical[1-0]*k_spherical[1-0] + 
-                                     E_spherical[1-1]*k_spherical[1--1])
-            elif M == -1:
-                return np.sqrt(1/2)*(E_spherical[1-1]*k_spherical[1-0] +
-                                     E_spherical[1-0]*k_spherical[1-1])
-            elif M == -2:
-                return E_spherical[1--1]*k_spherical[1--1]        
-        else:
-            raise ValueError("Function does not support moments higher than quadrupole")
-
-    def get_multipole_moment2(self, L: int, M: int):
-        assert np.abs(M) <= L
+    def get_amplitude(self, dL: int, dM: int):
+        assert np.abs(dM) <= dL
         E1 = self.amplitude*self.polarization
-        if L == 1:
-            return np.dot(E1, LaserDrive.u1[M].conjugate())
-        elif L == 2:
+        if dL == 1:
+            return np.dot(E1, LaserDrive.u1[dM].conjugate())
+        elif dL == 2:
             E2 = np.outer(E1, self.k_vector)
-            return np.sum(E2*LaserDrive.u2[M].conjugate())
+            return np.sum(E2*LaserDrive.u2[dM].conjugate())
         else:
             raise ValueError("Function does not support moments higher than quadrupole")
 
