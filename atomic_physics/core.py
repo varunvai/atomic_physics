@@ -210,14 +210,22 @@ class LaserDrive:
         if np.dot(self.k_vector, self.polarization) != 0:
             raise AssertionError("k_vector and polarization must be orthogonal")
         
-    def get_amplitude(self, dL: int, dM: int):
-        assert np.abs(dM) <= dL
+    def get_amplitude(self, L: int, M: int):
+        """Returns projection of laser's electric field onto the spherical
+        tensor component with indicies L >= 0 and -L <= M <= L. Useful for
+        extracting high-order moments for arbitrary `k_vector` and `polarization`.
+        
+        :param L: value of L.
+        :param M: value of M.
+        :return: amplitude of spherical basis component
+        """
+        assert np.abs(M) <= np.abs(L), "Ensure -L <= M <= L"
         E1 = self.amplitude*self.polarization
-        if dL == 1:
-            return np.dot(E1, LaserDrive.u1[dM].conjugate())
-        elif dL == 2:
+        if np.abs(L) == 1:
+            return np.dot(E1, LaserDrive.u1[M].conjugate())
+        elif np.abs(L) == 2:
             E2 = np.outer(E1, self.k_vector)
-            return np.sum(E2*LaserDrive.u2[dM].conjugate())
+            return np.sum(E2 * LaserDrive.u2[M].conjugate())
         else:
             raise ValueError("Function does not support moments higher than quadrupole")
 
