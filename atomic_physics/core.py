@@ -1,4 +1,5 @@
 import dataclasses
+import warnings
 
 import numpy as np
 import scipy.constants as consts
@@ -10,6 +11,10 @@ from atomic_physics.operators import (
     expectation_value,
 )
 from atomic_physics.wigner import wigner3j
+from atomic_physics.polarization import (
+    cartesian_to_spherical,
+    spherical_to_cartesian,
+)
 
 _uB = consts.physical_constants["Bohr magneton"][0]
 _uN = consts.physical_constants["nuclear magneton"][0]
@@ -147,6 +152,82 @@ class RFDrive:
         if self.polarization.shape != (3,):
             raise ValueError("Polarization must be a 3-element vector")
 
+@dataclasses.dataclass(frozen=True)
+class LaserDrive:
+    """Represents an AC electric field, which drives electric dipole or quadrupole 
+    transitions.
+
+    Attributes:
+        frequency: frequency of the laser drive (rad/s).
+        amplitude: magnitude of the laser's electric field (V/m).
+        polarization: Cartesian vector describing the electric field's polarization. 
+            NOTE: `polarization` must be defined in the same basis as `k_vector`, 
+            NOT as a Jones vector in a plane normal to `k_vector`.This eliminates 
+            ambiguities when projecting 'polarization' along the quantization 
+            axis (z) of `Atom`.
+        k_vector: k-vector of laser.
+    """
+    frequency: float
+    amplitude: float
+    polarization: np.ndarray
+    k_vector: np.ndarray
+
+    # Rank 1 spherical basis components
+    u1 = np.array([
+        [0, 0, 1], # q = 0
+        [-np.sqrt(1/2), -1j*np.sqrt(1/2), 0], # q = +1
+        [np.sqrt(1/2), -1j*np.sqrt(1/2), 0] # q = -1
+    ], dtype=complex)
+
+    # Rank 2 spherical basis components
+    u2 = np.ndarray((5, 3, 3), dtype=complex)
+    # q = 0
+    u2[0] = np.sqrt(1/6) * (
+        2 * np.outer(u1[0], u1[0]) + 
+        np.outer(u1[1], u1[-1]) + 
+        np.outer(u1[-1], u1[1])
+    )
+    # q = +1
+    u2[1] = 1/np.sqrt(2) * (
+        np.outer(u1[0], u1[1]) + 
+        np.outer(u1[1], u1[0])
+    )
+    # q = +2
+    u2[2] = np.outer(u1[1], u1[1])
+    # q = -1
+    u2[-1] = 1/np.sqrt(2) * (
+        np.outer(u1[0], u1[-1]) + 
+        np.outer(u1[-1], u1[0])
+    )
+    # q = -2
+    u2[-2] = np.outer(u1[-1], u1[-1])
+
+    def __post_init__(self):
+        if self.polarization.shape != (3,):
+            raise ValueError("Polarization must be a 3-element vector")
+        if self.k_vector.shape != (3,):
+            raise ValueError("k_vector must be a 3-element vector")
+        if np.dot(self.k_vector, self.polarization) != 0:
+            raise AssertionError("k_vector and polarization must be orthogonal")
+        
+    def get_amplitude(self, L: int, M: int):
+        """Returns projection of laser's electric field onto the spherical
+        tensor component with indicies L >= 0 and -L <= M <= L. Useful for
+        extracting high-order moments for arbitrary `k_vector` and `polarization`.
+        
+        :param L: value of L.
+        :param M: value of M.
+        :return: amplitude of spherical basis component
+        """
+        assert np.abs(M) <= np.abs(L), "Ensure -L <= M <= L"
+        E1 = self.amplitude*self.polarization
+        if np.abs(L) == 1:
+            return np.dot(E1, LaserDrive.u1[M].conjugate())
+        elif np.abs(L) == 2:
+            E2 = np.outer(E1, self.k_vector)
+            return np.sum(E2 * LaserDrive.u2[M].conjugate())
+        else:
+            raise ValueError("Function does not support moments higher than quadrupole")
 
 @dataclasses.dataclass
 class Atom:
@@ -618,6 +699,69 @@ class Atom:
         """
         R = self.get_magnetic_dipoles()[upper, lower]
         Omega = amplitude * R / consts.hbar
+        return Omega
+
+    def get_rabi_laser(self, lower: int, upper: int, amplitude: float) -> float:
+        r"""Returns the Rabi frequency for an electric multipole transition.
+        Currently only supports electric dipole (E1) and electric quadrupole (E2)
+        transitions. Can be modified easily for higher orders if these matrix elements
+        are provided by `get_electric_multipoles`.
+
+        See also :meth:`get_electric_multipoles`.
+
+        :param lower: index of the state with lower energy involved in the transition.
+        :param upper: index of the state with higher energy involved in the transition.
+        :param amplitude: amplitude of the spherical basis component of the driving field.
+            For E1 transitions, amplitude units should be V/m. 
+            For E2 transitions, amplitude units should be V/m^2... etc.
+        :return: the Rabi frequency. We retain phase information, so this can be either
+            positive or negative. We define the Rabi frequency so that
+            :math:`t_{\pi} = \pi / |\Omega|`
+        """
+        # Check if transition is allowed under E1 or E2 selection rules
+        level_u = self.get_level_for_state(upper)
+        level_l = self.get_level_for_state(lower)
+        dJ = level_u.J - level_l.J
+        dL = level_u.L - level_l.L
+
+        if dL in [-1, 1]:
+            order = 1
+            if dJ not in [-1, 0, +1]:
+                raise ValueError(                    
+                    "For 1st order transitions \n"
+                    "dJ must be in [-1, 0, 1] \n"
+                    "Got dJ={} and dL={}".format(dJ, dL)
+                )
+        elif dL in [-2, 0, 2]:
+            order = 2
+            warnings.warn(
+                "This is a quadrupole transition. Ensure amplitude units are V/m^2", 
+                UserWarning, stacklevel=3
+            )
+            if dJ not in [-2, -1, 0, 1, 2]:
+                raise ValueError(                    
+                    "For 2nd order transitions \n"
+                    "dJ must be in [-2, -1, 0, 1, 2] \n"
+                    "Got dJ={} and dL={}".format(dJ, dL)
+                )
+        else:
+            raise ValueError(
+                "Unsupported transition order. \n"
+                "Only 1st order transitions are "
+                "supported. [abs(dL) & abs(dJ) < 2]\n"
+                "Got dJ={} and dL={}".format(dJ, dL)
+            )
+                  
+        # The matrix returned by _calc_electric_multipoles() is upper-triangular
+        # The following line symmetrizes it to make 'get_rabi_optical' function 
+        # agnostic to the order of the first two arguments.
+        R = (self.get_electric_multipoles()[upper, lower] + 
+             self.get_electric_multipoles()[lower, upper])
+
+        # NOTE: f has units of rad/s
+        f = self.get_transition_frequency_for_states((lower, upper), relative=False)
+        M = R*np.sqrt(3 * np.pi * consts.epsilon_0 * consts.hbar * (consts.c/f)**(2*order+1))
+        Omega = amplitude * M / consts.hbar
         return Omega
 
     def _calc_electric_multipoles(self):
